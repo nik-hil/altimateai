@@ -1,78 +1,75 @@
 from fastapi import FastAPI, HTTPException, Depends
-from pydantic import BaseModel
+import database
+import lineage
 import uuid
-import datetime
 
-# Mock AI Response - Replace with actual AI integration in v1
-def get_ai_suggestions(query: str):
-    return {"suggestions": ["Consider using an index on column X", "Rewrite using a common table expression (CTE)"]}
+openai.api_key = "YOUR_OPENAI_API_KEY"
+
+async def get_ai_suggestions(query: str):
+  try:
+      response = openai.Completion.create(
+          engine="text-davinci-003",
+          prompt=f"Suggest improvements to the following SQL query:\n\n{query}",
+          max_tokens=150,
+          n=1,
+          stop=None,
+          temperature=0.7,
+      )
+      suggestions = response.choices[0].text.strip().split('\n')      
+      return {"suggestions": suggestions}
+  except Exception as e:
+      print(f"Error calling OpenAI API: {e}")
+      return {"suggestions": ["Error getting suggestions"], "error": str(e) } # Return a default error message
+
 
 app = FastAPI()
 
-class Query(BaseModel):
-    query_text: str
-    user_id: str = None  
-    created_at: datetime.datetime = datetime.datetime.now(datetime.timezone.utc)
-
-class QueryWithLineage(BaseModel):
-  query_id: uuid.UUID
-  query_text: str
-  user_id: str = None
-  created_at: datetime.datetime
-  lineage: dict = {}
-
-queries = {} # using in memory dict for now. Will change to DB in future
-
 # 1. Store Query
-@app.post("/queries/", response_model=QueryWithLineage)
-async def store_query(query: Query):
-    query_id = uuid.uuid4()
-    lineage = extract_lineage(query.query_text) # implement basic lineage
-    stored_query = QueryWithLineage(query_id = query_id, query_text=query.query_text, user_id=query.user_id, created_at=query.created_at, lineage=lineage)
-    queries[query_id] = stored_query
-    return stored_query
-
-# basic lineage extraction
-def extract_lineage(query: str):
-    # Basic string parsing for MVP - Improve in v1
-    words = query.lower().split()
-    tables = []
-    columns = []
-
-    keywords = ["from", "join", "update", "insert", "select"]
-
-    for i, word in enumerate(words):
-        if word in keywords :
-          if word == "select":
-            columns.extend(words[i+1].split(',')) # naive column extraction
-          else:
-            tables.append(words[i+1])
-
-    return {"tables": list(set(tables)), "columns": list(set(columns))}
+@app.post("/queries/")
+async def store_query(query_text: str, user_id: str = None):
+    query_data = {"query_text": query_text, "user_id": user_id}
+    
+    stored_query = await database.add_query(query_data)
+    if stored_query:
+      return stored_query
+    else:
+      raise HTTPException(status_code=400, detail="Failed to store the query.")
 
 
 # 2. Retrieve Queries
-@app.get("/queries/", response_model=list[QueryWithLineage])
-async def retrieve_queries(user_id: str = None):
-  if user_id:
-    return [q for q in queries.values() if q.user_id == user_id ]
-  else:
-    return list(queries.values())
+@app.get("/queries/")
+async def retrieve_queries(user_id: str = None, limit:int=100, skip:int=0):    
+    return await database.retrieve_queries(user_id, limit, skip)
 
 
-# 3. Get Lineage
-@app.get("/queries/{query_id}/lineage", response_model=dict)
+# 3. Get Lineage (updated to process lineage asynchronously)
+@app.get("/queries/{query_id}/lineage")
 async def get_lineage(query_id: uuid.UUID):
-    if query_id not in queries:
-        raise HTTPException(status_code=404, detail="Query not found")
-    return queries[query_id].lineage
+    query = await database.retrieve_query(query_id)
 
-# 4. Get AI Suggestions
+    if not query:
+        raise HTTPException(status_code=404, detail="Query not found")
+
+    if not query.lineage:  # if lineage not already computed
+      extracted_lineage = lineage.extract_lineage(query.query_text)
+      update_success = await database.update_query_lineage(query_id, extracted_lineage)
+
+      if not update_success:
+        raise HTTPException(status_code=500, detail="Failed to update lineage")
+      
+      return extracted_lineage
+    else:      
+      return query.lineage
+
+
+
+# 4. Get AI Suggestions (Corrected)
 @app.get("/queries/{query_id}/suggestions")
 async def get_suggestions(query_id: uuid.UUID):
-  if query_id not in queries:
-        raise HTTPException(status_code=404, detail="Query not found")
-  
-  suggestions = get_ai_suggestions(queries[query_id].query_text)
-  return suggestions
+    query = await database.retrieve_query(query_id)  # Retrieve from MongoDB
 
+    if not query:
+        raise HTTPException(status_code=404, detail="Query not found")
+
+    suggestions = await get_ai_suggestions(query.query_text) # await call for openai
+    return suggestions
