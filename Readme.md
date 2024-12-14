@@ -28,8 +28,8 @@ The system comprises the following components:
 1. **Clone the repository:**
 
    ```bash
-   git clone https://your_repository_url.git  #Replace with url of your repo
-   cd sql-query-service
+   git clone https://github.com/nik-hil/altimateai.git  #Replace with url of your repo
+   cd altimateai
    ```
 
 1. **Install dependencies:**
