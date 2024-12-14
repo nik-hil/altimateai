@@ -1,0 +1,10 @@
+aiokafka
+aioredis
+fastapi
+pydantic
+sqlparse
+uvicorn
+python-dotenv
+openai
+backoff
+motor

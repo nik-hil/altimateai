@@ -24,3 +24,8 @@
  - Query Access Patterns: If certain queries are accessed very frequently, a longer TTL could be beneficial.
  - Memory Capacity: Available Redis memory should also be considered.
 
+
+# V3
+ - Added Kafka producer and consumer to seprate the lineage processing and storing.
+ - Added logger and logger.conf.
+ - Fixed code and formatting.

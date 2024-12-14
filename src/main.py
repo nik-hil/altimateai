@@ -1,85 +1,90 @@
-from fastapi import FastAPI, HTTPException, Depends
-import database
-import lineage
+import json
+import logging
+import logging.config
 import uuid
-import openai
+
+from fastapi import HTTPException
+
 import cache
+import database
+from application import app
+from genai import get_ai_suggestions
+from kkafka import KAFKA_TOPIC_AI, KAFKA_TOPIC_LINEAGE, producer
 
-openai.api_key = "YOUR_OPENAI_API_KEY"
-
-async def get_ai_suggestions(query: str):
-  try:
-      response = openai.Completion.create(
-          engine="text-davinci-003",
-          prompt=f"Suggest improvements to the following SQL query:\n\n{query}",
-          max_tokens=150,
-          n=1,
-          stop=None,
-          temperature=0.7,
-      )
-      suggestions = response.choices[0].text.strip().split('\n')      
-      return {"suggestions": suggestions}
-  except Exception as e:
-      print(f"Error calling OpenAI API: {e}")
-      return {"suggestions": ["Error getting suggestions"], "error": str(e) } # Return a default error message
+logging.config.fileConfig("logging.conf")  # load the config file
 
 
-app = FastAPI()
+logger = logging.getLogger(__name__)
+
 
 # 1. Store Query
 @app.post("/queries/")
 async def store_query(query_text: str, user_id: str = None):
+    logger.info(f"Received request to store query: {query_text[:50]}...")
     query_data = {"query_text": query_text, "user_id": user_id}
-    
     stored_query = await database.add_query(query_data)
+
     if stored_query:
-      extracted_lineage = lineage.extract_lineage(query_text) # get lineage for caching
-      await cache.cache_query(stored_query, extracted_lineage) # cache query and lineage
-      return stored_query
+        # Send message to Kafka for lineage extraction
+        await producer.send_and_wait(
+            KAFKA_TOPIC_LINEAGE,
+            json.dumps(
+                {"query_id": str(stored_query.query_id), "query_text": query_text}
+            ).encode(),
+        )
+        # Send message to Kafka for AI suggestions
+        await producer.send_and_wait(
+            KAFKA_TOPIC_AI,
+            json.dumps(
+                {"query_id": str(stored_query.query_id), "query_text": query_text}
+            ).encode(),
+        )
+
+        # cache the base query
+        await cache.cache_query(stored_query)
+
+        return stored_query
     else:
-      raise HTTPException(status_code=400, detail="Failed to store the query.")
+        raise HTTPException(status_code=400, detail="Failed to store the query.")
 
 
 # 2. Retrieve Queries
 @app.get("/queries/")
-async def retrieve_queries(user_id: str = None, limit:int=100, skip:int=0):    
+async def retrieve_queries(user_id: str = None, limit: int = 100, skip: int = 0):
     return await database.retrieve_queries(user_id, limit, skip)
 
 
-# 3. Get Lineage (updated to process lineage asynchronously)
+# 3. Get Lineage (Updated for Async)
 @app.get("/queries/{query_id}/lineage")
 async def get_lineage(query_id: uuid.UUID):
+    # Check cache first
+    logger.info(f"Retriving {query_id=}")
     cached_lineage = await cache.get_cached_lineage(query_id)
-
     if cached_lineage:
         return cached_lineage
 
-    #If not in cache, fetch from DB and update cache
+    # If not found in cache then get from db. it may not be available in db also as it will be updated by kafka consumer.
     query = await database.retrieve_query(query_id)
     if not query:
         raise HTTPException(status_code=404, detail="Query not found")
 
-    if not query.lineage:      
-      extracted_lineage = lineage.extract_lineage(query.query_text)
-      update_success = await database.update_query_lineage(query_id, extracted_lineage)
-      if not update_success:
-          raise HTTPException(status_code=500, detail="Failed to update lineage")
+    if query.lineage:
+        return query.lineage
     else:
-      extracted_lineage = query.lineage
+        return {
+            "status": "Lineage is being processed. Please try again later."
+        }  # lineage is not in db as it is being processed
 
 
-    await cache.cache_query(query, extracted_lineage) # update the cache. 
-    return extracted_lineage
-
-
-
-# 4. Get AI Suggestions (Corrected)
+# 4. Get AI Suggestions (Updated for Async)
 @app.get("/queries/{query_id}/suggestions")
 async def get_suggestions(query_id: uuid.UUID):
-    query = await database.retrieve_query(query_id)  # Retrieve from MongoDB
-
+    logger.info(f"Retriving ai suggestions {query_id=}")
+    query = await database.retrieve_query(query_id)
     if not query:
         raise HTTPException(status_code=404, detail="Query not found")
 
-    suggestions = await get_ai_suggestions(query.query_text) # await call for openai
-    return suggestions
+    if "suggestions" in query.model_dump():  # check if suggestions already added in db
+        return {"suggestions": query.suggestions}
+    else:
+        return {"status": "Suggestions are being processed. Please try again later."}
