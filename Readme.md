@@ -22,13 +22,14 @@ The system comprises the following components:
 * **Kafka:**  Handles asynchronous tasks (lineage extraction, AI suggestions).
 * **OpenAI API:** Provides AI-powered query suggestions.  (Requires an OpenAI API key)
 
+[![](https://mermaid.ink/img/pako:eNqVk99PgzAQx_-Vpr6wZHvxYZk8mOAWE-KMbosvgg8nHD-y0ZIW1GXZ_25bYLCJGI-kvV4_R-57bQ804CFSm8YC8oQs1z4jymT5XgV8ulktyapEsScbFB9pgD6tGG0vEoVl6XE0IpPJLXGeXc-n9yAL5ZkMFD59azN0WIOPnMV8cedZtTPqYdYYptKzzETmECTYRz1AtAXPMlN3v_U6aki3em0mzfxnmTKEGOecyTJDoWTUEdKEzoRou0jpCvsbNLJaDFn4v9rbyh23U7Tj_lZvi5mspxyZo0-rcnQ_hxN6lF0QfZL0dy7rpLQagx1IaU5TFoJv0b6KbqJx5U8-07BI7Ov8q8vWhZz4IBjmqwvU0ADDdNXXhp7Nhum6eQ0-nf7E6ZiqBmWQhuqdHXSyT4sEM_WSbOWGILb6ZI-Kg7Lgmz0LqF2IEsdU8DJOqB3BTqpVmYdQ4CIFdSOyUzQH9sp5sz5-AxP-JTE?type=png)](https://mermaid.live/edit#pako:eNqVk99PgzAQx_-Vpr6wZHvxYZk8mOAWE-KMbosvgg8nHD-y0ZIW1GXZ_25bYLCJGI-kvV4_R-57bQ804CFSm8YC8oQs1z4jymT5XgV8ulktyapEsScbFB9pgD6tGG0vEoVl6XE0IpPJLXGeXc-n9yAL5ZkMFD59azN0WIOPnMV8cedZtTPqYdYYptKzzETmECTYRz1AtAXPMlN3v_U6aki3em0mzfxnmTKEGOecyTJDoWTUEdKEzoRou0jpCvsbNLJaDFn4v9rbyh23U7Tj_lZvi5mspxyZo0-rcnQ_hxN6lF0QfZL0dy7rpLQagx1IaU5TFoJv0b6KbqJx5U8-07BI7Ov8q8vWhZz4IBjmqwvU0ADDdNXXhp7Nhum6eQ0-nf7E6ZiqBmWQhuqdHXSyT4sEM_WSbOWGILb6ZI-Kg7Lgmz0LqF2IEsdU8DJOqB3BTqpVmYdQ4CIFdSOyUzQH9sp5sz5-AxP-JTE)
 
 ## Getting Started
 
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/nik-hil/altimateai.git  #Replace with url of your repo
+   git clone https://github.com/nik-hil/altimateai.git  
    cd altimateai
    ```
 
@@ -104,3 +105,4 @@ Copy the contents of example.env into .env and fill in the required values:
  - Integrate Prometheus for metric collection, open telemetry for instrumentation.
  - Add more sophisticated error handling and monitoring.
  - Implement background tasks for cache invalidation.
+
